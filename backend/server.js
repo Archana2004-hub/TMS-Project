@@ -1,8 +1,8 @@
 const express = require('express');
-const mongoose = require('mongoose');
 const cors = require('cors');
 const dotenv = require('dotenv');
 const path = require('path');
+const connectDB = require('./config/db');
 
 dotenv.config();
 
@@ -28,12 +28,29 @@ app.use('/api/reports',     require('./routes/reportRoutes'));
 // Health check
 app.get('/api/health', (req, res) => res.json({ status: 'TMS API running' }));
 
-// Connect DB and start server
-mongoose.connect(process.env.MONGO_URI)
-  .then(() => {
-    console.log('MongoDB connected');
-    app.listen(process.env.PORT || 5000, () =>
-      console.log(`Server running on port ${process.env.PORT || 5000}`)
-    );
-  })
-  .catch(err => { console.error('DB connection failed:', err); process.exit(1); });
+const startServer = async (port = Number(process.env.PORT) || 5000) => {
+  try {
+    await connectDB();
+
+    const server = app.listen(port, () => {
+      console.log(`Server running on port ${port}`);
+    });
+
+    server.on('error', (error) => {
+      if (error.code === 'EADDRINUSE') {
+        const nextPort = port + 1;
+        console.warn(`Port ${port} is busy. Retrying on ${nextPort}...`);
+        startServer(nextPort);
+        return;
+      }
+
+      console.error('Server failed to start:', error.message);
+      process.exit(1);
+    });
+  } catch (error) {
+    console.error('Failed to start server:', error.message);
+    process.exit(1);
+  }
+};
+
+startServer();
